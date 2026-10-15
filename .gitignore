@@ -1,0 +1,21 @@
+# Virtual environments
+.venv/
+venv/
+
+# Secrets
+.env
+.env.*
+
+# Data (MIMIC-IV is credentialed — never commit)
+data/
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ipynb_checkpoints/
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/
