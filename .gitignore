@@ -5,6 +5,9 @@ venv/
 # Secrets
 .env
 .env.*
+*.pem
+*.key
+.aws/
 
 # Data (MIMIC-IV is credentialed — never commit)
 data/
