@@ -121,6 +121,15 @@ The first attempts failed with `stream closed because of a broken pipe` on a dif
 UV_HTTP_TIMEOUT=180 UV_CONCURRENT_DOWNLOADS=2 uv add ...
 ```
 
+### Also: `No module named 'presidio_analyzer'` (`src/pii_redaction/presidio_service.py`)
+
+**Fix**: `uv add presidio-analyzer presidio-anonymizer`
+
+**Catch**: Presidio's `AnalyzerEngine()` needs the spaCy model `en_core_web_lg`. If the model is missing, Presidio tries to download it at runtime with `pip`, which a uv venv doesn't have. Add the model as a pinned dependency instead, with the version matching spaCy's major.minor (spaCy 3.8 → model 3.8.0):
+```
+uv add "en_core_web_lg @ https://github.com/explosion/spacy-models/releases/download/en_core_web_lg-3.8.0/en_core_web_lg-3.8.0-py3-none-any.whl"
+```
+
 ---
 
 ## 7. Postgres port 5432 unreachable from the Mac
