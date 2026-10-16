@@ -79,16 +79,24 @@ def main():
 
     from fastapi.testclient import TestClient
     from sqlalchemy import text
-    from src.api.main import app, get_db_engine, middleware
+    from src.api.auth import User, get_current_user
+    from src.api.db import get_db_engine
+    from src.api.main import app, middleware
 
     with get_db_engine().connect() as conn:
         drug_vocab = [r[0] for r in conn.execute(text("SELECT DISTINCT drug FROM patient_encounters WHERE drug IS NOT NULL"))]
+        embedded = frozenset(r[0] for r in conn.execute(
+            text("SELECT DISTINCT subject_id FROM patient_encounters WHERE clinical_embedding IS NOT NULL")))
+
+    # The eval runs as a clinician assigned to every embedded patient; its audit events are tagged "eval_harness"
+    app.dependency_overrides[get_current_user] = lambda: User(username="eval_harness", role="clinician",
+                                                               patient_ids=embedded)
 
     model_id, price_in, price_out = model_pricing()
     results, llm_cases = [], 0
     run_tokens = {"prompt": 0, "completion": 0, "llm_calls": 0}
     with TestClient(app) as client:  # runs the API startup (loads Presidio, NeMo, embedder)
-        patients = client.get("/api/v1/patients").json()["patients"]
+        patients = [str(p) for p in sorted(embedded)]
         for case in cases:
             patient_id = patients[case["patient"] % len(patients)]
             key = hashlib.sha256(f"{fingerprint}|{patient_id}|{case['question']}".encode()).hexdigest()

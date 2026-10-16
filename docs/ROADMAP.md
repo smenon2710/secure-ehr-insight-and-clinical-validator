@@ -26,7 +26,9 @@ Improvements to make this project production-grade and resume-worthy, in priorit
 
 Publish the numbers in the README.
 
-## 3. Automatic citation verification
+## 3. Automatic citation verification (partly done)
+**Done**: the UI checks every cited Record ID against the retrieved records and marks unverified ones in amber. **Remaining**: enforce it in the API (e.g. reject or flag the response) so non-UI clients get it too.
+
 After each answer, check that every cited Record ID was in the retrieved set. Flag unverified citations in the UI. (We've seen the model cite record "15" instead of "25".)
 
 ## 4. Retrieval quality and performance
@@ -34,13 +36,14 @@ After each answer, check that every cited Record ID was in the retrieved set. Fl
 - HNSW index on `clinical_embedding`.
 - Benchmark p50/p95 latency and recall@5 before and after.
 
-## 5. Compliance features (HIPAA-aligned)
+## 5. Compliance features (HIPAA-aligned) ✅ Done (2026-10-16)
+**Result**: JWT sign-in, clinician/auditor roles, care-team patient assignments enforced in the API, and an audit log with redacted questions. Includes an auditor dashboard. `evals/security_eval.py` passes 17/17. **Not done**: making the log append-only at the DB level (a separate writer role without UPDATE/DELETE).
+
 - **Audit log** table: user, question, record IDs accessed, rail fired, timestamp. Add an audit page in the UI.
 - **Authentication and role-based access**: clinician login, with per-patient access lists enforced in the API.
 
 ## 6. Production engineering
-- **Connection pooling**: `get_db_engine()` builds a new engine on every request. Create one at startup and reuse it.
-- Replace the deprecated `@app.on_event("startup")` with a FastAPI `lifespan` handler.
+- ~~Connection pooling~~ ✅ and ~~`lifespan` instead of `@app.on_event`~~ ✅ (done with item 5).
 - `pytest` unit and API tests, GitHub Actions CI, `docker compose` for local runs.
 - HTTPS (ALB or Caddy). Secrets in AWS Secrets Manager instead of `.env`.
 - Optional: Terraform for the EC2 instances, security groups and networking.
@@ -50,5 +53,5 @@ After each answer, check that every cited Record ID was in the retrieved set. Fl
 - README with an architecture diagram, a 30-second demo GIF, setup steps and evaluation results.
 - Make the repo public only after the database hardening in item 6.
 
-## Resume bullet (items 1 and 2 done)
-> Built a zero-trust clinical RAG system over 232K MIMIC-IV records (pgvector, Presidio, NeMo Guardrails, FastAPI, Docker on AWS); built a deterministic evaluation harness and field-aware PII redaction that cut over-redaction from 13.8% to 0% and closed an MRN leak (0% PII leakage), with 100% citation accuracy, 100% unsafe-prompt blocking and 0% false refusals at ~$0.006 per eval run.
+## Resume bullet (items 1, 2 and 5 done)
+> Built a zero-trust clinical RAG system over 232K MIMIC-IV records (pgvector, Presidio, NeMo Guardrails, FastAPI, Docker on AWS) with role-based access, care-team scoping and a PHI-safe audit trail; built a deterministic evaluation harness and field-aware PII redaction that cut over-redaction from 13.8% to 0% and closed an MRN leak (0% PII leakage), with 100% citation accuracy, 100% unsafe-prompt blocking and 0% false refusals at ~$0.006 per eval run.

@@ -1,5 +1,49 @@
 # Changelog
 
+## 2026-10-16: Access control, audit log and UI redesign (roadmap item 5)
+
+### Security (`src/api/`)
+- **Sign-in**: bcrypt-hashed passwords; signed JWT session tokens valid for one 8-hour shift (`auth.py`).
+- **Roles**, enforced in the API rather than just hidden in the UI:
+  - **clinician**: can list, view and query only the patients assigned to them (`patient_access` table).
+  - **auditor**: can read the audit log only; no patient data.
+- **Audit log** (`audit_log` table, `audit.py`): every sign-in (including failures), patient list, snapshot view, question, denied attempt and audit-log view. Each entry records the user, patient, record IDs accessed, guardrail outcome, latency and IP.
+  - Questions are stored **with identifiers removed**, so the log is not a second PHI store.
+- Schema in `src/database/security_schema.sql`, applied automatically at API startup.
+- New endpoints: `POST /api/v1/auth/login`, `GET /api/v1/auth/me`, `GET /api/v1/audit` (auditors only).
+  - All patient endpoints now require a clinician token.
+  - `/health` stays open; it returns no patient data.
+- Roadmap #6 items fixed along the way:
+  - **Connection pooling**: one engine per process instead of one per request.
+  - Deprecated `@app.on_event` replaced with a `lifespan` handler.
+- `scripts/07_manage_users.py`: create users, assign patients, list and remove users. Passwords are prompted for, never passed as arguments.
+
+### UI (`src/ui/app.py`, `.streamlit/config.toml`)
+- Light chart-paper theme; Public Sans with tabular figures.
+- **Sign-in screen**. Sessions that expire return you to sign-in with a message.
+- **Clinician view**:
+  - The patient list shows only your care team.
+  - **Evidence chips** under each answer: green if the record was retrieved, amber "unverified" if not (runtime citation check, part of roadmap #3).
+  - A table of the records the model saw, with cited rows highlighted.
+  - Guardrail blocks get a distinct "Request not answered" callout.
+- **Auditor view**: event counts (denied attempts, failed sign-ins, guardrail blocks), a "Needs review" table, filterable event table, and CSV export.
+
+### Evaluation
+- `evals/security_eval.py`: 17 allow/deny and audit-trail checks against the real API (17/17 pass, one LLM call).
+- `rag_eval.py` now runs as an authorized clinician, tagged `eval_harness` in the audit log. Results unchanged.
+
+### Deploying this version (breaking: sign-in is now required)
+1. Add a signing secret to `.env` on the server:
+   ```
+   python3 -c "import secrets; print('JWT_SECRET=' + secrets.token_urlsafe(48))" >> .env
+   ```
+2. Pull, rebuild and recreate the container (as before).
+3. Create users inside the running container:
+   ```
+   docker exec -it fde-project-2 python scripts/07_manage_users.py add dr_lee --role clinician --first-n 3
+   docker exec -it fde-project-2 python scripts/07_manage_users.py add compliance --role auditor
+   ```
+
 ## 2026-10-16: Field-aware redaction and evaluation harness (roadmap items 1 and 2)
 
 ### Redaction (`src/pii_redaction/`)

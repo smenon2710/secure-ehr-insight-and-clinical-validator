@@ -1,20 +1,22 @@
 # Evaluations
 
-Two scripts. Both use deterministic checks: no LLM-as-judge, and only one of them calls the LLM at all.
+Three scripts, all with deterministic checks (no LLM-as-judge).
 
 | Script | What it measures | LLM calls | Runtime |
 |---|---|---|---|
 | `redaction_eval.py` | Over-redaction of structured fields, and PII leakage | **0** | ~20 s |
 | `rag_eval.py` | Guardrail accuracy, citation accuracy, grounding, patient-ID leakage | ~2 per case, **cached** | ~75 s cold |
+| `security_eval.py` | Authentication, role and care-team enforcement, audit trail (17 checks) | **1** | ~40 s |
 
-Both need the database reachable (`.env`). Results are written to `evals/results/` and cached responses to `evals/.cache/`. Both are gitignored because they contain MIMIC-derived text.
+All three need the database reachable (`.env`). Results are written to `evals/results/` and cached responses to `evals/.cache/`; both folders are gitignored because they contain MIMIC-derived text.
 
 ## Run
 ```
 uv run python evals/redaction_eval.py            # --sample 300 (default)
 uv run python evals/rag_eval.py                  # reuses cached responses: free
-uv run python evals/rag_eval.py --no-cache       # fresh LLM calls (~$0.006 for all 14 cases)
+uv run python evals/rag_eval.py --no-cache       # fresh LLM calls (~$0.005 for all 14 cases)
 uv run python evals/rag_eval.py --no-cache --limit 2   # cheap smoke test
+uv run python evals/security_eval.py             # creates and removes 2 temporary users
 ```
 
 ## How the checks work
@@ -52,7 +54,9 @@ Responses are cached under a fingerprint of the files that shape the prompt (`ma
 | Answers with a citation | **100%** |
 | Ungrounded drug mentions | **0** |
 | Patient ID leaks | **0** |
-| Cost per full run | ~$0.006 (~$0.00045 per case) |
+| Cost per full run | ~$0.005 (~$0.00035 per case) |
+
+**Security (17 checks, all pass)**: no token, tampered token and wrong password are rejected; clinicians see only assigned patients and get 403 on others; auditors cannot read patient data; clinicians cannot read the audit log; failed logins, denials, record IDs, redacted questions and client IP are logged; viewing the audit log is itself logged.
 
 ## Limitations
 - 14 cases and 6 patients is a small set. Treat these as regression checks, not statistical claims.
