@@ -22,7 +22,18 @@ class ClinicalPIIRedactor:
         )
         self.analyzer.registry.add_recognizer(hospital_recognizer)
 
+        # --- FDE FIX 3: Medical Record Numbers ---
+        # Presidio has no built-in MRN recognizer; the redaction eval caught these leaking 100% of the time
+        mrn_pattern = Pattern(
+            name="mrn_with_label",
+            regex=r"(?i)\b(?:MRN|MR#|medical record (?:number|no\.?|#))\s*[:#]?\s*\d{5,10}\b",
+            score=0.95,
+        )
+        mrn_recognizer = PatternRecognizer(supported_entity="MEDICAL_RECORD_NUMBER", patterns=[mrn_pattern])
+        self.analyzer.registry.add_recognizer(mrn_recognizer)
+
         self.target_entities = [
+            "MEDICAL_RECORD_NUMBER",
             "PERSON", 
             "PHONE_NUMBER", 
             "EMAIL_ADDRESS", 

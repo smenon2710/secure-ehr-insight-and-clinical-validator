@@ -1,5 +1,23 @@
 # Changelog
 
+## 2026-10-16: Field-aware redaction and evaluation harness (roadmap items 1 and 2)
+
+### Redaction (`src/pii_redaction/`)
+- **New `record_formatter.py`**, shared by the API and the guardrails retrieval hook.
+  - Structured coded fields pass through unredacted. Only free text (`comments`) goes through Presidio.
+  - Empty values and MIMIC's `___` placeholders are dropped.
+- **The patient ID is no longer sent to the LLM.** The context header used to include it, and Presidio didn't catch it.
+- **New MRN recognizer** in `presidio_service.py`. The eval showed labelled MRNs leaking 100% of the time.
+- **Results:** over-redaction 13.8% → 0.0%, PII leak rate 11.1% → 0.0%.
+  - Before, the old pipeline turned `Record ID: 1970` into `<DATE_TIME>`, `Albuterol Inhaler` into `<PERSON>`, and `Route: SC` into `<PERSON>: <LOCATION>`.
+
+### Evaluation (`evals/`)
+- `redaction_eval.py`: over-redaction and PII-leak metrics. No LLM calls.
+- `rag_eval.py` + `cases.json`: guardrail accuracy, citation accuracy, grounding, patient-ID leakage.
+  - Deterministic checks; responses are cached; exact cost from token counts.
+- Results: 100% unsafe prompts blocked, 0% false refusals, 100% citation accuracy, 0 ungrounded drugs, ~$0.006 per full run.
+  - Details in `evals/README.md`.
+
 ## 2026-10-16: UI redesign and pipeline transparency
 
 ### Frontend (`src/ui/app.py`, `.streamlit/config.toml`)

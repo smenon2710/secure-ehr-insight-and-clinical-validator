@@ -12,6 +12,7 @@ from sqlalchemy import create_engine, text
 # Make `src.*` importable when NeMo loads this file from src/guardrails/
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from src.pii_redaction.presidio_service import ClinicalPIIRedactor
+from src.pii_redaction.record_formatter import format_record
 
 TOP_K = 5
 
@@ -32,22 +33,6 @@ def _load():
         _redactor = ClinicalPIIRedactor()
 
 
-def _format_record(row) -> str:
-    fields = [
-        ("Record ID", row['id']),
-        ("Admission", row['admission_type']),
-        ("Care unit", row['careunit']),
-        ("Drug", row['drug']),
-        ("Strength", row['prod_strength']),
-        ("Dose", " ".join(str(v) for v in (row['dose_val_rx'], row['dose_unit_rx']) if v)),
-        ("Route", row['route']),
-        ("Lab test", row['test_name']),
-        ("Diagnosis", row['description']),
-        ("Severity", row['drg_severity']),
-    ]
-    return " | ".join(f"{label}: {value}" for label, value in fields if value)
-
-
 @action(is_system_action=True)
 async def retrieve_relevant_chunks(context: dict = None):
     """Overrides NeMo's built-in retrieval: pgvector search over patient_encounters,
@@ -62,8 +47,8 @@ async def retrieve_relevant_chunks(context: dict = None):
     query_vector = _model.encode(user_message).tolist()
 
     search_sql = text("""
-        SELECT id, admission_type, careunit, drug, prod_strength, dose_val_rx, dose_unit_rx,
-               route, test_name, description, drg_severity
+        SELECT id, admission_type, careunit, eventtype, drug, prod_strength, dose_val_rx, dose_unit_rx,
+               route, test_name, comments, description, drg_severity
         FROM patient_encounters
         WHERE clinical_embedding IS NOT NULL
         ORDER BY clinical_embedding <=> CAST(:query_vector AS vector(768))
@@ -72,7 +57,7 @@ async def retrieve_relevant_chunks(context: dict = None):
     with _engine.connect() as conn:
         rows = conn.execute(search_sql, {"query_vector": str(query_vector), "top_k": TOP_K}).mappings().fetchall()
 
-    chunks = [_redactor.redact_clinical_context(_format_record(row)) for row in rows]
+    chunks = [format_record(row, _redactor) for row in rows]
     relevant_chunks = "\n".join(chunks)
 
     return ActionResult(

@@ -13,6 +13,7 @@ from dotenv import load_dotenv
 from sentence_transformers import SentenceTransformer
 
 from src.pii_redaction.presidio_service import ClinicalPIIRedactor
+from src.pii_redaction.record_formatter import format_record
 
 load_dotenv()
 
@@ -114,7 +115,8 @@ async def process_chat(request: ChatRequest):
         # 2. Native pgvector similarity search on patient_encounters table
         with engine.connect() as conn:
             query = text("""
-                SELECT id, drug, dose_val_rx, dose_unit_rx, route, eventtype, test_name, comments, description
+                SELECT id, admission_type, careunit, eventtype, drug, prod_strength, dose_val_rx, dose_unit_rx,
+                       route, test_name, comments, description, drg_severity
                 FROM patient_encounters
                 WHERE subject_id = :subject_id AND clinical_embedding IS NOT NULL
                 ORDER BY clinical_embedding <=> CAST(:query_embedding AS vector)
@@ -125,22 +127,16 @@ async def process_chat(request: ChatRequest):
                 "subject_id": int(request.patient_id),
                 "query_embedding": str(query_vector)
             })
-            rows = result.fetchall()
-            
-            if not rows:
-                real_db_context = f"No historical records found for patient {request.patient_id}."
-            else:
-                context_lines = []
-                for row in rows:
-                    context_lines.append(
-                        f"Record ID: {row.id}, Drug: {row.drug} ({row.dose_val_rx} {row.dose_unit_rx}), Route: {row.route}, "
-                        f"Event: {row.eventtype}, Test: {row.test_name}, Comments: {row.comments}, Diagnosis: {row.description}"
-                    )
-                real_db_context = f"[Records for Patient ID: {request.patient_id}]\n" + "\n".join(context_lines)
+            rows = result.mappings().fetchall()
 
-        # 3. Redact the real context via Presidio
+        # 3. Format records with field-aware redaction (Presidio on free text only; no patient ID sent to the LLM)
         redactor = middleware["redactor"]
-        safe_context = redactor.redact_clinical_context(raw_text=real_db_context)
+        if not rows:
+            safe_context = "No historical records found for the selected patient."
+        else:
+            safe_context = "[Records for the selected patient]\n" + "\n".join(
+                format_record(row, redactor) for row in rows
+            )
         
         # 4. Assemble Prompt
         augmented_prompt = f"Clinical Context:\n{safe_context}\n\nUser Question: {latest_question}"
