@@ -1,6 +1,7 @@
 # uvicorn src.api.main:app --reload
 import asyncio
 import os
+import time
 from typing import List
 
 from fastapi import FastAPI, HTTPException
@@ -19,6 +20,9 @@ app = FastAPI(title="Zero-Trust Clinical RAG API")
 
 # Global state to hold our heavy ML models so they only load once at startup
 middleware = {}
+
+# Start of the "bot refuse medical advice" message in src/guardrails/rails.co
+GUARDRAIL_REFUSAL_PREFIX = "I am an enterprise EHR retrieval system"
 
 @app.on_event("startup")
 async def startup_event():
@@ -99,6 +103,7 @@ async def process_clinical_query(query: ClinicalQuery):
 @app.post("/api/v1/chat")
 async def process_chat(request: ChatRequest):
     try:
+        started = time.perf_counter()
         latest_question = request.messages[-1].content
         engine = get_db_engine()
         
@@ -109,8 +114,8 @@ async def process_chat(request: ChatRequest):
         # 2. Native pgvector similarity search on patient_encounters table
         with engine.connect() as conn:
             query = text("""
-                SELECT drug, dose_val_rx, dose_unit_rx, route, eventtype, test_name, comments, description 
-                FROM patient_encounters 
+                SELECT id, drug, dose_val_rx, dose_unit_rx, route, eventtype, test_name, comments, description
+                FROM patient_encounters
                 WHERE subject_id = :subject_id AND clinical_embedding IS NOT NULL
                 ORDER BY clinical_embedding <=> CAST(:query_embedding AS vector)
                 LIMIT 5;
@@ -128,7 +133,7 @@ async def process_chat(request: ChatRequest):
                 context_lines = []
                 for row in rows:
                     context_lines.append(
-                        f"Drug: {row.drug} ({row.dose_val_rx} {row.dose_unit_rx}), Route: {row.route}, "
+                        f"Record ID: {row.id}, Drug: {row.drug} ({row.dose_val_rx} {row.dose_unit_rx}), Route: {row.route}, "
                         f"Event: {row.eventtype}, Test: {row.test_name}, Comments: {row.comments}, Diagnosis: {row.description}"
                     )
                 real_db_context = f"[Records for Patient ID: {request.patient_id}]\n" + "\n".join(context_lines)
@@ -147,8 +152,17 @@ async def process_chat(request: ChatRequest):
         # 6. Route through Guardrails
         rails = middleware["rails"]
         response = await rails.generate_async(messages=nemo_history)
-        
-        return {"status": "success", "llm_response": response['content']}
+        llm_response = response['content']
+
+        return {
+            "status": "success",
+            "llm_response": llm_response,
+            # Pipeline trace for the UI: what was retrieved, what the LLM actually saw, and whether a rail fired
+            "records_retrieved": len(rows),
+            "redacted_context": safe_context.strip(),
+            "guardrail_triggered": llm_response.strip().startswith(GUARDRAIL_REFUSAL_PREFIX),
+            "latency_ms": round((time.perf_counter() - started) * 1000),
+        }
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -174,3 +188,56 @@ async def get_unique_patients():
             
     except Exception as e:
         return {"patients": [], "error": str(e)}
+
+# --- ENDPOINT 4: PATIENT SNAPSHOT (UI SIDEBAR; NOT SENT TO THE LLM) ---
+@app.get("/api/v1/patients/{patient_id}/summary")
+async def get_patient_summary(patient_id: int):
+    try:
+        engine = get_db_engine()
+        with engine.connect() as conn:
+            overview = conn.execute(text("""
+                SELECT MAX(anchor_age) AS age, MAX(gender) AS gender,
+                       COUNT(*) AS encounters, COUNT(clinical_embedding) AS embedded,
+                       COUNT(DISTINCT hadm_id) AS admissions
+                FROM patient_encounters
+                WHERE subject_id = :subject_id
+            """), {"subject_id": patient_id}).mappings().one()
+
+            top_drugs = conn.execute(text("""
+                SELECT drug, COUNT(*) AS n
+                FROM patient_encounters
+                WHERE subject_id = :subject_id AND drug IS NOT NULL
+                GROUP BY drug ORDER BY n DESC LIMIT 5
+            """), {"subject_id": patient_id}).mappings().fetchall()
+
+            diagnoses = conn.execute(text("""
+                SELECT description, COUNT(*) AS n
+                FROM patient_encounters
+                WHERE subject_id = :subject_id AND description IS NOT NULL
+                GROUP BY description ORDER BY n DESC LIMIT 3
+            """), {"subject_id": patient_id}).mappings().fetchall()
+
+        return {
+            "patient_id": str(patient_id),
+            "age": overview["age"],
+            "gender": overview["gender"],
+            "encounters": overview["encounters"],
+            "embedded_records": overview["embedded"],
+            "admissions": overview["admissions"],
+            "top_drugs": [row["drug"] for row in top_drugs],
+            "diagnoses": [row["description"] for row in diagnoses],
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# --- ENDPOINT 5: HEALTH CHECK (API + DATABASE) ---
+@app.get("/api/v1/health")
+async def health():
+    db_ok = True
+    try:
+        with get_db_engine().connect() as conn:
+            conn.execute(text("SELECT 1"))
+    except Exception:
+        db_ok = False
+    return {"api": "ok", "database": "ok" if db_ok else "unreachable", "models_loaded": bool(middleware)}
