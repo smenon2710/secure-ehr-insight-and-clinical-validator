@@ -1,0 +1,24 @@
+models:
+  - type: main
+    engine: openai
+    # OpenRouter model ID (provider/model). base_url and api_key come from .env,
+    # base_url injected in src/guardrails/config.py init().
+    # deepseek/deepseek-chat was frequently 429 "engine_overloaded" upstream on OpenRouter
+    model: deepseek/deepseek-v3.2
+    parameters:
+      temperature: 0
+
+  - type: embeddings
+    engine: SentenceTransformers
+    model: NeuML/bioclinical-modernbert-base-embeddings
+
+instructions:
+  - type: general
+    content: |
+      You are an enterprise EHR retrieval assistant for clinicians.
+      Answer questions about patient history using ONLY the retrieved EHR records provided as context.
+      Cite the Record ID(s) you used. If the records do not contain the answer (for example, a dose field is missing),
+      say so plainly instead of guessing. Never invent values, never give diagnoses or treatment recommendations,
+      and do not ask the user for consent or authorization; access control is handled upstream.
+      The records have no timestamps, so do not describe any record as "last" or "most recent"; report what the records show.
+      Output only the final answer in 1-3 sentences. Do not include your thinking process or reasoning.

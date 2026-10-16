@@ -130,6 +130,27 @@ UV_HTTP_TIMEOUT=180 UV_CONCURRENT_DOWNLOADS=2 uv add ...
 uv add "en_core_web_lg @ https://github.com/explosion/spacy-models/releases/download/en_core_web_lg-3.8.0/en_core_web_lg-3.8.0-py3-none-any.whl"
 ```
 
+### Also: NeMo Guardrails + OpenRouter (script 06)
+
+- **Base URL ignored**: NeMo 0.24's `openai` engine reads `OPENAI_API_KEY` from env but **not** `OPENAI_BASE_URL`, so requests go to api.openai.com. The script now sets `parameters["base_url"]` from `OPENAI_BASE_URL` for `engine: openai` models.
+- **YAML indentation**: a `- type: embeddings` list item indented under the previous item makes `config.yml` invalid. All `- type:` entries must line up.
+- **`Missing or empty 'choices' in response: ['id', 'error']`**: NeMo hides the provider error. Call OpenRouter directly to see it:
+  ```
+  curl -s https://openrouter.ai/api/v1/chat/completions -H "Authorization: Bearer $OPENAI_API_KEY" \
+    -H "Content-Type: application/json" -d '{"model":"<model>","messages":[{"role":"user","content":"hi"}],"max_tokens":5}'
+  ```
+  Here it was **429 `engine_overloaded`**: `deepseek/deepseek-chat` failed ~50% of calls upstream. Switched to `deepseek/deepseek-v3.2` (8/8 OK). `curl https://openrouter.ai/api/v1/key -H "Authorization: Bearer $OPENAI_API_KEY"` confirms the key and remaining budget.
+
+### Also: valid queries got made-up answers ("please confirm patient consent")
+
+**Cause**: `rails.co` defined the *ask about patient history* intent but no flow, and nothing fed database records to the LLM, so it improvised.
+
+**Fix**
+- `src/guardrails/config.py` overrides NeMo's built-in `retrieve_relevant_chunks` action. It runs a pgvector search over `patient_encounters`, redacts results with Presidio, and returns them as `relevant_chunks`, which NeMo injects into the prompt.
+- Added `define flow answer patient history` in `rails.co`. **Don't** add a `define bot provide patient history` with example text: NeMo then returns that text verbatim instead of generating.
+- Added `instructions:` in `config.yml`: answer only from records, cite Record IDs, no "most recent" (no timestamps), no thinking output.
+- `temperature: 0` reduced hallucinated IDs/values. Answers can still occasionally mis-cite a Record ID, so verify against the DB.
+
 ---
 
 ## 7. Postgres port 5432 unreachable from the Mac
