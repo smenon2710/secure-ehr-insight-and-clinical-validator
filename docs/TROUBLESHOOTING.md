@@ -186,6 +186,34 @@ This is still the fallback whenever `<MY_IP>` changes (new network or ISP reassi
 
 ---
 
+## 7b. Deployed app (Docker on a second EC2) shows no patient IDs
+
+**Setup**: app container on EC2 `52.14.95.97` (private `172.31.41.214`); Postgres on the DB EC2 (public `3.138.58.92`, private `172.31.42.107`), same VPC.
+
+**Symptom**: Streamlit patient dropdown empty / "Database Connection Error". No visible error, because `/api/v1/patients` returns HTTP 200 with `{"patients": [], "error": "..."}` when the DB call fails.
+
+**Diagnosis**
+```
+docker exec fde-project-2 curl -s localhost:8000/api/v1/patients   # shows the real DB error
+nc -vz -w 5 172.31.42.107 5432                                       # from the app EC2; timed out
+```
+Port 8000 isn't published, so `curl localhost:8000` on the host returns nothing; always go through `docker exec`.
+
+**Three blockers, all networking**
+1. **DB security group** allowed 5432 only from the home IP. Fix: inbound TCP 5432 with the **app instance's security group** as the source.
+2. **`DB_HOST` was the public IP.** Traffic to a public IP goes out through the internet gateway and arrives from the app's *public* IP, so a security-group-sourced rule never matches. Fix: `DB_HOST=172.31.42.107` (private IP).
+3. **`pg_hba.conf`** didn't allow the VPC range. Fix: `host all all 172.31.0.0/16 scram-sha-256`, then `sudo systemctl restart postgresql`.
+
+Then **recreate** the container. `docker restart` does not re-read `--env-file`:
+```
+docker rm -f fde-project-2
+docker run -d --name fde-project-2 --restart unless-stopped --env-file .env -p 8501:8501 fde-project-2:latest
+```
+
+**Lesson**: EC2-to-EC2 inside a VPC uses private IPs and security-group references. The UI's "Database Connection Error" also appears when the API itself is down, so check the API before the database.
+
+---
+
 ## 8. Small gotchas
 
 | Situation | What was going on |
