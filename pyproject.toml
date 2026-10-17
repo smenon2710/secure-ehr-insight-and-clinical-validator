@@ -1,7 +1,7 @@
 [project]
 name = "secure-ehr-insight-and-clinical-validator"
 version = "0.1.0"
-description = "Add your description here"
+description = "Clinical record assistant over MIMIC-IV with care-team access control, PII redaction, guardrails and an audit log"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
