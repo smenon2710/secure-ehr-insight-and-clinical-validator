@@ -291,9 +291,9 @@ When direct DB or SSH connections suddenly time out:
 
 ## Open items
 
-- [ ] Restrict `pg_hba.conf` from `0.0.0.0/0` to `<MY_IP>/32` plus the VPC range `172.31.0.0/16` used by the app server (the security group is currently the only restriction).
+- [x] Restrict `pg_hba.conf` from `0.0.0.0/0` to `<MY_IP>/32` plus the VPC range `172.31.0.0/16` used by the app server. Done 2026-10-17.
 - [ ] Make `audit_log` append-only at the DB level (a writer role without UPDATE/DELETE).
-- [ ] Rotate the `fde_admin` password (it was exposed in a screenshot).
+- [x] Rotate the `fde_admin` password (it was exposed in a screenshot). Done 2026-10-17.
 - [ ] Fix the AWS CLI credentials (section 4).
 - [ ] Release the unused Elastic IP `<UNUSED_EIP>` if not done yet (section 3).
 - [ ] `01_ingest_baseline_data.py` uses `if_exists='append'`, so re-running duplicates all 232,158 rows. Truncate first or switch to `'replace'`.

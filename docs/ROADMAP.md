@@ -47,7 +47,7 @@ After each answer, check that every cited Record ID was in the retrieved set. Fl
 - `pytest` unit and API tests, GitHub Actions CI, `docker compose` for local runs.
 - HTTPS (ALB or Caddy). Secrets in AWS Secrets Manager instead of `.env`.
 - Optional: Terraform for the EC2 instances, security groups and networking.
-- Database hardening: restrict `pg_hba.conf`, rotate the `fde_admin` password, or migrate to RDS.
+- Database hardening: ~~restrict `pg_hba.conf`~~ ✅ and ~~rotate the `fde_admin` password~~ ✅ (2026-10-17); consider migrating to RDS.
 
 ## 7. Presentation
 - README with an architecture diagram, a 30-second demo GIF, setup steps and evaluation results.

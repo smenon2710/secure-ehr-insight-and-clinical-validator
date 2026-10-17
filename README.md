@@ -127,7 +127,7 @@ docs/               Roadmap, changelog, troubleshooting log
 
 ## Limitations and next steps
 - **Data handling**: retrieved records are sent to a third-party LLM provider (via OpenRouter). Whether that fits the PhysioNet data use agreement for credentialed MIMIC-IV data is an open question still to be confirmed.
-- **Deployment hardening**: HTTPS, sign-in rate limiting, an append-only audit log at the database level, and tighter `pg_hba.conf` rules are still to do.
+- **Deployment hardening**: HTTPS, sign-in rate limiting, and an append-only audit log at the database level are still to do.
 - **Evaluation scale**: grow the 14-case set toward ~50 cases across more patients, and run it in CI.
 - **Retrieval**: hybrid full-text + vector search and an HNSW index, with latency and recall benchmarks.
 

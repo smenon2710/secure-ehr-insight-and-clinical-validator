@@ -16,6 +16,10 @@
   - **Image contents**: the embedding model is downloaded at build time. The image runs as a non-root user, and `curl` is included for diagnostics.
 - `.dockerignore` keeps secrets, MIMIC data and eval output out of the image. It does **not** exclude `scripts/` (see TROUBLESHOOTING 7c).
 - The build and run commands are unchanged (see below).
+- Deployed and verified on EC2 on 2026-10-17. The server's old untracked `Dockerfile`, `.dockerignore` and `start.sh` had to be moved aside before `git pull`. Health check OK, the container runs as `app`, and a typed name showed up redacted in the audit log.
+
+### Database hardening
+- `fde_admin` password rotated. `pg_hba.conf` now allows only localhost, the VPC (`172.31.0.0/16`) and one admin IP, where it previously allowed `0.0.0.0/0`.
 
 ## 2026-10-16: Access control, audit log and UI redesign (roadmap item 5)
 
