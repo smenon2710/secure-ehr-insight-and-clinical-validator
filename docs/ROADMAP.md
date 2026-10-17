@@ -45,7 +45,14 @@ After each answer, check that every cited Record ID was in the retrieved set. Fl
 ## 6. Production engineering
 - ~~Connection pooling~~ ✅ and ~~`lifespan` instead of `@app.on_event`~~ ✅ (done with item 5).
 - `pytest` unit and API tests, GitHub Actions CI, `docker compose` for local runs.
-- HTTPS (ALB or Caddy). Secrets in AWS Secrets Manager instead of `.env`.
+- **HTTPS (planned, not started).** The UI is served over plain HTTP on port 8501, so sign-in passwords and session tokens are unencrypted on the network. Both options need a domain name pointing at the app server.
+  - *Option A, Caddy on the app EC2 (recommended; free):*
+    - Run Caddy with a two-line Caddyfile (`<domain> { reverse_proxy 127.0.0.1:8501 }`). It obtains and renews a Let's Encrypt certificate automatically and handles Streamlit's websockets.
+    - Publish the container on localhost only (`-p 127.0.0.1:8501:8501`).
+    - In the security group, open 80 and 443 and remove the public 8501 rule.
+  - *Option B, Application Load Balancer + ACM certificate:* managed, but about $16+/month. Use a target group on 8501 with stickiness enabled for websockets.
+  - *Verify:* `http://` redirects to `https://`, port 8501 is no longer reachable from outside, and sign-in still works.
+- Secrets in AWS Secrets Manager instead of `.env`.
 - Optional: Terraform for the EC2 instances, security groups and networking.
 - Database hardening: ~~restrict `pg_hba.conf`~~ ✅ and ~~rotate the `fde_admin` password~~ ✅ (2026-10-17); consider migrating to RDS.
 

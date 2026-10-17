@@ -292,6 +292,7 @@ When direct DB or SSH connections suddenly time out:
 ## Open items
 
 - [x] Restrict `pg_hba.conf` from `0.0.0.0/0` to `<MY_IP>/32` plus the VPC range `172.31.0.0/16` used by the app server. Done 2026-10-17.
+- [ ] Serve the app over HTTPS. It is plain HTTP on 8501 today, so passwords and tokens cross the network unencrypted. Plan in `docs/ROADMAP.md` item 6.
 - [ ] Make `audit_log` append-only at the DB level (a writer role without UPDATE/DELETE).
 - [x] Rotate the `fde_admin` password (it was exposed in a screenshot). Done 2026-10-17.
 - [ ] Fix the AWS CLI credentials (section 4).
