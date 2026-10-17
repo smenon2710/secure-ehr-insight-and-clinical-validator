@@ -37,7 +37,7 @@ After each answer, check that every cited Record ID was in the retrieved set. Fl
 - Benchmark p50/p95 latency and recall@5 before and after.
 
 ## 5. Compliance features (HIPAA-aligned) ✅ Done (2026-10-16)
-**Result**: JWT sign-in, clinician/auditor roles, care-team patient assignments enforced in the API, and an audit log with redacted questions. Includes an auditor dashboard. `evals/security_eval.py` passes 17/17. **Not done**: making the log append-only at the DB level (a separate writer role without UPDATE/DELETE).
+**Result**: JWT sign-in, clinician/auditor roles, care-team patient assignments enforced in the API, and an audit log with redacted questions. Includes an auditor dashboard. `evals/security_eval.py` passes 18/18. **Not done**: making the log append-only at the DB level (a separate writer role without UPDATE/DELETE).
 
 - **Audit log** table: user, question, record IDs accessed, rail fired, timestamp. Add an audit page in the UI.
 - **Authentication and role-based access**: clinician login, with per-patient access lists enforced in the API.

@@ -25,7 +25,7 @@ from sqlalchemy import text
 from src.api.audit import apply_security_schema
 from src.api.auth import hash_password
 from src.api.db import get_db_engine
-from src.api.main import app
+from src.api.main import app, middleware
 
 apply_security_schema()
 eng = get_db_engine()
@@ -57,6 +57,8 @@ try:
         check("auditor: chat -> 403", cl.post("/api/v1/chat", headers=H(ta), json={"patient_id": str(assigned), "messages": [{"role": "user", "content": "meds?"}]}).status_code == 403)
         r = cl.post("/api/v1/chat", headers=H(tc), json={"patient_id": str(assigned), "messages": [{"role": "user", "content": "What medications is this patient on? Dr. Emily Carter asked."}]})
         check("clinician: chat on assigned -> 200", r.status_code == 200)
+        prompts = " ".join(c.prompt or "" for c in middleware["rails"].explain().llm_calls)
+        check("typed name not sent to the LLM", bool(prompts) and "Emily Carter" not in prompts)
         ev = cl.get("/api/v1/audit", headers=H(ta), params={"username": "zz_test_clin"}).json()["events"]
         acts = {(e["action"], e["outcome"]) for e in ev}
         check("audit has failed login", ("login", "failed") in acts)

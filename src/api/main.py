@@ -24,6 +24,22 @@ middleware = {}
 # Start of the "bot refuse medical advice" message in src/guardrails/rails.co
 GUARDRAIL_REFUSAL_PREFIX = "I am an enterprise EHR retrieval system"
 
+# Coded columns whose values must survive redaction of the clinician's own questions
+CLINICAL_VOCABULARY_COLUMNS = ("drug", "test_name", "route", "eventtype", "careunit", "admission_type")
+
+
+def load_clinical_vocabulary() -> set:
+    """Distinct coded values from the records, plus each drug's leading word ("Albuterol" from "Albuterol Inhaler")."""
+    terms = set()
+    with get_db_engine().connect() as conn:
+        for column in CLINICAL_VOCABULARY_COLUMNS:
+            values = [r[0] for r in conn.execute(text(f"SELECT DISTINCT {column} FROM patient_encounters "
+                                                      f"WHERE {column} IS NOT NULL"))]
+            terms.update(values)
+            if column == "drug":
+                terms.update(v.split()[0] for v in values if v.split())
+    return terms
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -34,6 +50,7 @@ async def lifespan(app: FastAPI):
 
     # 1. Load Presidio (spaCy)
     middleware["redactor"] = ClinicalPIIRedactor()
+    middleware["redactor"].allow_terms(load_clinical_vocabulary())
 
     # 2. Load NeMo Guardrails (ModernBERT + DeepSeek)
     config = RailsConfig.from_path("./src/guardrails")
@@ -136,8 +153,15 @@ async def process_chat(chat: ChatRequest, request: Request, user: User = Depends
 
     latest_question = chat.messages[-1].content
     redactor = middleware["redactor"]
+    # Identifiers the clinician types (names, dates, MRNs) never reach the LLM either. Assistant turns are
+    # earlier model output, generated from already-redacted context.
+    safe_messages = [
+        {"role": msg.role, "content": redactor.redact_clinical_context(msg.content) if msg.role == "user" else msg.content}
+        for msg in chat.messages
+    ]
+    question_redacted = safe_messages[-1]["content"]
     try:
-        # 1. Embed the user's question into a 768-dim vector
+        # 1. Embed the user's question into a 768-dim vector (local model, so the unredacted text is fine here)
         query_vector = middleware["embedder"].encode(latest_question).tolist()
 
         # 2. Native pgvector similarity search, scoped to the one authorized patient
@@ -160,10 +184,10 @@ async def process_chat(chat: ChatRequest, request: Request, user: User = Depends
             )
 
         # 4. Assemble Prompt
-        augmented_prompt = f"Clinical Context:\n{safe_context}\n\nUser Question: {latest_question}"
+        augmented_prompt = f"Clinical Context:\n{safe_context}\n\nUser Question: {question_redacted}"
 
         # 5. Format History for Guardrails
-        nemo_history = [{"role": msg.role, "content": msg.content} for msg in chat.messages[:-1]]
+        nemo_history = safe_messages[:-1]
         nemo_history.append({"role": "user", "content": augmented_prompt})
 
         # 6. Route through Guardrails
@@ -173,13 +197,11 @@ async def process_chat(chat: ChatRequest, request: Request, user: User = Depends
         latency_ms = round((time.perf_counter() - started) * 1000)
     except Exception as e:
         audit.record("chat", "error", username=user.username, role=user.role, patient_id=patient_id,
-                     question_redacted=redactor.redact_clinical_context(latest_question),
-                     client_ip=client_ip(request), detail=type(e).__name__)
+                     question_redacted=question_redacted, client_ip=client_ip(request), detail=type(e).__name__)
         raise HTTPException(status_code=500, detail=str(e))
 
     audit.record("chat", "success", username=user.username, role=user.role, patient_id=patient_id,
-                 record_ids=[row["id"] for row in rows],
-                 question_redacted=redactor.redact_clinical_context(latest_question),
+                 record_ids=[row["id"] for row in rows], question_redacted=question_redacted,
                  guardrail_triggered=guardrail_triggered, latency_ms=latency_ms, client_ip=client_ip(request))
 
     return {

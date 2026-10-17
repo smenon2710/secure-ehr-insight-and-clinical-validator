@@ -1,5 +1,22 @@
 # Changelog
 
+## 2026-10-17: Clinician questions redacted before the LLM; Dockerfile in the repo
+
+### Privacy fix (`src/api/main.py`, `src/pii_redaction/presidio_service.py`)
+- **Bug**: only the stored audit-log copy of a question was redacted. The question itself, and earlier user turns, went to the LLM (OpenRouter) as typed, so "Dr. Emily Carter asked…" sent the name out.
+- **Fix**: every user turn is Presidio-redacted before it goes into the prompt. Retrieval still embeds the raw question, which is fine because the embedding model runs locally.
+- **Avoiding over-redaction**: Presidio on its own turned `Albuterol Inhaler` into `<PERSON>` and `SC` into `<LOCATION>`. At startup the API loads the coded vocabulary from the records (drugs, each drug's leading word, routes, care units, lab tests, admission types) plus common route abbreviations. A detected span is kept only when the whole span matches one of these terms (case-insensitive).
+- **Known limits**: brand names that aren't in the data (`Lasix`) are still redacted. A person whose name exactly matches a drug word (`Dr. Senna`) is not redacted.
+- `evals/security_eval.py` adds a check that reads the prompts NeMo actually sent: **typed name not sent to the LLM**. It fails on the previous code and passes now (18/18). `rag_eval.py` results are unchanged on a fresh, uncached run.
+
+### Deployment (`Dockerfile`, `.dockerignore`)
+- The Dockerfile used on EC2 was never committed. It is now in the repo:
+  - **Processes**: API on `127.0.0.1:8000` (container-internal only, so `X-Forwarded-For` can't be spoofed from outside) and Streamlit on `8501`.
+  - **If either process exits**, the container exits, so `--restart unless-stopped` restarts it. The container also exits right away if `JWT_SECRET` is missing.
+  - **Image contents**: the embedding model is downloaded at build time. The image runs as a non-root user, and `curl` is included for diagnostics.
+- `.dockerignore` keeps secrets, MIMIC data and eval output out of the image. It does **not** exclude `scripts/` (see TROUBLESHOOTING 7c).
+- The build and run commands are unchanged (see below).
+
 ## 2026-10-16: Access control, audit log and UI redesign (roadmap item 5)
 
 ### Security (`src/api/`)

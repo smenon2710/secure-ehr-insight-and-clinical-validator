@@ -1,5 +1,12 @@
+from typing import Iterable
+
 from presidio_analyzer import AnalyzerEngine, PatternRecognizer, Pattern
 from presidio_anonymizer import AnonymizerEngine
+
+# Route/frequency abbreviations Presidio misreads as places or names ("SC" -> South Carolina)
+CLINICAL_ABBREVIATIONS = ["IV", "PO", "SC", "SQ", "IM", "SL", "PR", "NG", "PO/NG", "PRN", "BID", "TID", "QID", "QD",
+                          "ED", "ICU", "MICU", "SICU", "CCU", "PACU"]
+
 
 class ClinicalPIIRedactor:
     def __init__(self):
@@ -43,17 +50,29 @@ class ClinicalPIIRedactor:
             "DATE_TIME"
         ]
 
+        self.allowed_terms = set()
+        self.allow_terms(CLINICAL_ABBREVIATIONS)
+
+    def allow_terms(self, terms: Iterable[str]):
+        """Clinical vocabulary (drug names, routes, care units...) that is never redacted.
+        A detected span is kept only if the whole span matches a term (case-insensitive), so a real
+        name next to a drug name is still redacted."""
+        self.allowed_terms.update(t.strip().casefold() for t in terms if t and t.strip())
+
     def redact_clinical_context(self, raw_text: str) -> str:
         if not raw_text:
             return ""
 
-        analyzer_results = self.analyzer.analyze(
-            text=raw_text,
-            entities=self.target_entities,
-            language='en',
-            score_threshold=0.4 
-        )
-        
+        analyzer_results = [
+            r for r in self.analyzer.analyze(
+                text=raw_text,
+                entities=self.target_entities,
+                language='en',
+                score_threshold=0.4
+            )
+            if raw_text[r.start:r.end].strip().casefold() not in self.allowed_terms
+        ]
+
         anonymized_result = self.anonymizer.anonymize(
             text=raw_text,
             analyzer_results=analyzer_results

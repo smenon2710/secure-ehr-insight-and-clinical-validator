@@ -110,7 +110,7 @@ def main():
                 })
                 r.raise_for_status()
                 response = r.json()
-                calls = middleware["rails"].explain_info.llm_calls if middleware["rails"].explain_info else []
+                calls = middleware["rails"].explain().llm_calls
                 response["_tokens"] = {
                     "llm_calls": len(calls),
                     "prompt": sum(c.prompt_tokens or 0 for c in calls),

@@ -1,0 +1,25 @@
+# Secrets: config comes from `docker run --env-file .env`, never baked into the image
+.env
+.env.*
+*.pem
+*.key
+.aws/
+
+# MIMIC-IV data and MIMIC-derived eval output (credentialed; never in an image)
+data/
+evals/results/
+evals/.cache/
+
+# Local tooling
+.git/
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.DS_Store
+.vscode/
+.idea/
+.claude/
+
+# scripts/ must NOT be listed here: 07_manage_users.py runs inside the container (TROUBLESHOOTING 7c)
