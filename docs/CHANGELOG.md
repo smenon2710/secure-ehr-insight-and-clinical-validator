@@ -43,6 +43,8 @@
    docker exec -it fde-project-2 python scripts/07_manage_users.py add dr_lee --role clinician --first-n 3
    docker exec -it fde-project-2 python scripts/07_manage_users.py add compliance --role auditor
    ```
+   Or run the same commands from the Mac with `uv run python scripts/07_manage_users.py ...`. Users live in the shared database.
+4. Deployed and verified on EC2 on 2026-10-17. Two issues hit along the way (script missing from the container, password mismatch) are covered in `docs/TROUBLESHOOTING.md` section 7c.
 
 ## 2026-10-16: Field-aware redaction and evaluation harness (roadmap items 1 and 2)
 

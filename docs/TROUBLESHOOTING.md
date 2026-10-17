@@ -214,6 +214,56 @@ docker run -d --name fde-project-2 --restart unless-stopped --env-file .env -p 8
 
 ---
 
+## 7c. Deploying the sign-in version (access control + audit log)
+
+**Context**: from commit `b3aa43f` the app requires sign-in. The server's `.env` needs `JWT_SECRET`, and users must be created with `scripts/07_manage_users.py`. Full steps are in `docs/CHANGELOG.md`.
+
+### `can't open file '/app/scripts/07_manage_users.py'`
+**Symptom**: the script exists on the EC2 host (`ls scripts/` shows it), but `docker exec fde-project-2 python scripts/07_manage_users.py ...` can't find it.
+
+**Cause**: files reach the container only when the image is **built**. Either `.dockerignore` excluded `scripts/`, or the container was still running the image from before `git pull`.
+
+**Diagnose**
+```
+cat .dockerignore                       # must not list scripts
+docker exec fde-project-2 ls /app/src/api   # new code has auth.py, audit.py, db.py
+```
+**Fix**: remove `scripts` from `.dockerignore` if present, then rebuild and **recreate** the container:
+```
+docker build -t fde-project-2:latest .
+docker rm -f fde-project-2
+docker run -d --name fde-project-2 --restart unless-stopped --env-file .env -p 8501:8501 fde-project-2:latest
+docker exec fde-project-2 ls /app/scripts   # 07_manage_users.py is listed
+```
+**Lesson**: `git pull` changes files on the host only. Running code changes after `docker build` **and** `docker rm` + `docker run`.
+
+Also type `docker exec ... --first-n 3` on one line. A line break made the shell run `--first-n 10` as a separate command.
+
+### Can't sign in although the password is "right"
+**Symptom**: "Username or password is incorrect" for a user created moments earlier. Another user signs in fine.
+
+**Diagnose**: every sign-in is audited, so check the auditor view ("Needs review") or query it:
+```sql
+SELECT ts, username, outcome FROM audit_log WHERE action = 'login' ORDER BY ts DESC LIMIT 10;
+SELECT username, role FROM app_users;
+```
+Here the user existed with the right role and patients, and the log showed repeated `failed` logins. So the stored password didn't match what was being typed.
+
+**Cause**: the password prompt (`getpass`) shows nothing while typing, so a typo is saved silently. Backspace can also misbehave through `docker exec -it`. Both entries matched each other, so the script accepted them.
+
+**Fix**: re-run `add` with the same username to reset the password. Patient assignments are rebuilt by the command. Type slowly, with no backspace (Ctrl+C and restart instead). Easiest from the Mac, which avoids the Docker terminal:
+```
+uv run python scripts/07_manage_users.py add dr_lee --role clinician --first-n 3
+```
+Users live in the shared Postgres, so an account created from the Mac works on the EC2 site immediately.
+
+### Other notes
+- Usernames are case-sensitive (`dr_lee` ≠ `Dr_Lee`).
+- Sessions expire after 8 hours; the UI returns to sign-in with a message.
+- Container exits with `JWT_SECRET is not set`: the secret isn't in `.env`, or the container wasn't recreated with `--env-file .env`.
+
+---
+
 ## 8. Small gotchas
 
 | Situation | What was going on |
@@ -222,6 +272,9 @@ docker run -d --name fde-project-2 --restart unless-stopped --env-file .env -p 8
 | `sudo` asks for a password | The command ran on the **Mac**, not the server. The EC2 `ubuntu` user has passwordless sudo. Check the prompt: `ubuntu@ip-172-31-42-107` is the server. |
 | `sudo -u postgres psql`: *could not change directory to /home/ubuntu* | Harmless. Use `sudo -i -u postgres psql` to avoid it. |
 | `DtypeWarning: Columns (20: order_subtype) have mixed types` | Harmless. Silence with `pd.read_csv(..., low_memory=False)` or an explicit `dtype`. |
+| `uvicorn` fails with `No module named 'nemoguardrails'` even with the venv active | The shell ran the **global** `~/.pyenv/.../uvicorn`. zsh had cached its path before `uvicorn` was installed in `.venv`. Run `rehash`, or always use `uv run uvicorn ...` / `uv run streamlit ...`. |
+| `[Errno 48] Address already in use` on port 8000 | A leftover `uvicorn --reload` watcher from an earlier failed start. Find it with `lsof -nP -iTCP:8000 -sTCP:LISTEN` and `kill <PID>`. Stop servers with Ctrl+C rather than closing the tab. |
+| UI shows "Database Connection Error" | The UI shows this whenever the **API** is unreachable, not only when the database is down. Check the API terminal or `docker logs` first. |
 
 ---
 
@@ -238,7 +291,8 @@ When direct DB or SSH connections suddenly time out:
 
 ## Open items
 
-- [ ] Restrict `pg_hba.conf` from `0.0.0.0/0` to `<MY_IP>/32` (the security group is currently the only restriction).
+- [ ] Restrict `pg_hba.conf` from `0.0.0.0/0` to `<MY_IP>/32` plus the VPC range `172.31.0.0/16` used by the app server (the security group is currently the only restriction).
+- [ ] Make `audit_log` append-only at the DB level (a writer role without UPDATE/DELETE).
 - [ ] Rotate the `fde_admin` password (it was exposed in a screenshot).
 - [ ] Fix the AWS CLI credentials (section 4).
 - [ ] Release the unused Elastic IP `3.23.229.148` if not done yet (section 3).
