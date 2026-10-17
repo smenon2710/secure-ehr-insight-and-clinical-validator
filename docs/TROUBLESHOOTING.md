@@ -6,13 +6,13 @@ Issues hit while setting up the EC2 Postgres instance and running the baseline i
 
 | Item | Value |
 |---|---|
-| EC2 instance | `i-0814588b1a576ca55` (`test-FDE-Database`), us-east-2c, Ubuntu |
-| Public IP (Elastic IP `fde-ehr-clinical`) | `3.138.58.92` |
-| Security group | `sg-02ab405bd8175b097` (`fde-ehr-insight-clinical`) |
+| EC2 instance | `<DB_INSTANCE_ID>` (`test-FDE-Database`), us-east-2c, Ubuntu |
+| Public IP (Elastic IP `fde-ehr-clinical`) | `<DB_PUBLIC_IP>` |
+| Security group | `<DB_SECURITY_GROUP_ID>` (`fde-ehr-insight-clinical`) |
 | Postgres | 14, database `ehr_db`, user `fde_admin` |
 | Local | macOS, Python 3.12 via uv, SQLAlchemy 2.1, psycopg 3 |
 
-`<MY_IP>` below means your current public IP: `curl https://checkip.amazonaws.com`.
+`<MY_IP>` below means your current public IP: `curl https://checkip.amazonaws.com`. Other `<...>` values (`<DB_PUBLIC_IP>`, `<APP_PRIVATE_IP>`, instance and security group IDs) stand in for this deployment's real identifiers; find them in the EC2 console.
 
 ---
 
@@ -20,17 +20,17 @@ Issues hit while setting up the EC2 Postgres instance and running the baseline i
 
 **Symptom**
 ```
-ssh: connect to host 3.134.110.138 port 22: Operation timed out
+ssh: connect to host <OLD_AUTO_IP> port 22: Operation timed out
 ```
 
 **Diagnosis**
 - *Timed out* (not *refused* or *permission denied*) means packets are dropped somewhere in the network, so the key is not the issue.
 - Security group already allowed TCP 22 from `<MY_IP>/32`.
-- The instance's **Public IPv4 DNS** in the console was `ec2-3-138-58-92...`, so the actual IP was `3.138.58.92`. `3.134.110.138` was the old auto-assigned IP from before the Elastic IP was attached.
+- The instance's **Public IPv4 DNS** in the console was `ec2-<DB_PUBLIC_IP>...`, so the actual IP was `<DB_PUBLIC_IP>`. `<OLD_AUTO_IP>` was the old auto-assigned IP from before the Elastic IP was attached.
 
 **Fix**: connect to the current IP:
 ```
-ssh -i test-FDE-Database.pem ubuntu@3.138.58.92
+ssh -i test-FDE-Database.pem ubuntu@<DB_PUBLIC_IP>
 ```
 
 **Lesson**: always read the IP off the instance's details page or the Elastic IP, not from old notes. Quick reachability test: `nc -vz -G 5 <ip> 22`.
@@ -43,7 +43,7 @@ ssh -i test-FDE-Database.pem ubuntu@3.138.58.92
 ```
 Permissions 0644 for 'test-FDE-Database.pem' are too open.
 Load key "test-FDE-Database.pem": bad permissions
-ubuntu@3.138.58.92: Permission denied (publickey).
+ubuntu@<DB_PUBLIC_IP>: Permission denied (publickey).
 ```
 
 **Cause**: SSH ignores private keys readable by other users. Downloaded `.pem` files often come as `0644`.
@@ -58,8 +58,8 @@ chmod 400 test-FDE-Database.pem
 ## 3. Unused Elastic IP
 
 **Finding**: two Elastic IPs were allocated:
-- `fde-ehr-clinical`, `3.138.58.92`: associated with the instance. **Keep.**
-- `fde-elastic-ip`, `3.23.229.148`: not associated with anything.
+- `fde-ehr-clinical`, `<DB_PUBLIC_IP>`: associated with the instance. **Keep.**
+- `fde-elastic-ip`, `<UNUSED_EIP>`: not associated with anything.
 
 **Action**: release the unassociated one (EC2 → Elastic IPs → Actions → Release). An unattached EIP costs about $3.60/month. Check first that no DNS record or config points at it.
 
@@ -89,7 +89,7 @@ postgresql://None:None@host:None/None
 
 **Fix**: define all five variables in `.env`:
 ```
-DB_HOST=3.138.58.92
+DB_HOST=<DB_PUBLIC_IP>
 DB_PORT=5432
 DB_USER=fde_admin
 DB_PASSWORD=<password>
@@ -155,7 +155,7 @@ uv add "en_core_web_lg @ https://github.com/explosion/spacy-models/releases/down
 
 ## 7. Postgres port 5432 unreachable from the Mac
 
-**Symptom**: `nc -vz 3.138.58.92 5432` timed out even though the security group allowed 5432 from `<MY_IP>/32`.
+**Symptom**: `nc -vz <DB_PUBLIC_IP> 5432` timed out even though the security group allowed 5432 from `<MY_IP>/32`.
 
 **Diagnosis** (run on the server)
 ```
@@ -178,7 +178,7 @@ sudo ss -tlnp | grep 5432       # now 0.0.0.0:5432 and [::]:5432
 Port 22 worked, so Postgres can be reached through SSH without exposing 5432:
 ```
 # terminal 1, leave running (prints nothing); Ctrl+C to close
-ssh -i test-FDE-Database.pem -N -L 5433:localhost:5432 ubuntu@3.138.58.92
+ssh -i test-FDE-Database.pem -N -L 5433:localhost:5432 ubuntu@<DB_PUBLIC_IP>
 ```
 `.env` for tunnel mode: `DB_HOST=localhost`, `DB_PORT=5433`. Local port 5433 avoids clashing with any Postgres running on the Mac.
 
@@ -188,20 +188,20 @@ This is still the fallback whenever `<MY_IP>` changes (new network or ISP reassi
 
 ## 7b. Deployed app (Docker on a second EC2) shows no patient IDs
 
-**Setup**: app container on EC2 `52.14.95.97` (private `172.31.41.214`); Postgres on the DB EC2 (public `3.138.58.92`, private `172.31.42.107`), same VPC.
+**Setup**: app container on EC2 `<APP_PUBLIC_IP>` (private `<APP_PRIVATE_IP>`); Postgres on the DB EC2 (public `<DB_PUBLIC_IP>`, private `<DB_PRIVATE_IP>`), same VPC.
 
 **Symptom**: Streamlit patient dropdown empty / "Database Connection Error". No visible error, because `/api/v1/patients` returns HTTP 200 with `{"patients": [], "error": "..."}` when the DB call fails.
 
 **Diagnosis**
 ```
 docker exec fde-project-2 curl -s localhost:8000/api/v1/patients   # shows the real DB error
-nc -vz -w 5 172.31.42.107 5432                                       # from the app EC2; timed out
+nc -vz -w 5 <DB_PRIVATE_IP> 5432                                       # from the app EC2; timed out
 ```
 Port 8000 isn't published, so `curl localhost:8000` on the host returns nothing; always go through `docker exec`.
 
 **Three blockers, all networking**
 1. **DB security group** allowed 5432 only from the home IP. Fix: inbound TCP 5432 with the **app instance's security group** as the source.
-2. **`DB_HOST` was the public IP.** Traffic to a public IP goes out through the internet gateway and arrives from the app's *public* IP, so a security-group-sourced rule never matches. Fix: `DB_HOST=172.31.42.107` (private IP).
+2. **`DB_HOST` was the public IP.** Traffic to a public IP goes out through the internet gateway and arrives from the app's *public* IP, so a security-group-sourced rule never matches. Fix: `DB_HOST=<DB_PRIVATE_IP>` (private IP).
 3. **`pg_hba.conf`** didn't allow the VPC range. Fix: `host all all 172.31.0.0/16 scram-sha-256`, then `sudo systemctl restart postgresql`.
 
 Then **recreate** the container. `docker restart` does not re-read `--env-file`:
@@ -269,7 +269,7 @@ Users live in the shared Postgres, so an account created from the Mac works on t
 | Situation | What was going on |
 |---|---|
 | Ctrl+C "doesn't stop" the terminal | It was an idle SSH session, not a running process. Use `exit` or Ctrl+D to log out. |
-| `sudo` asks for a password | The command ran on the **Mac**, not the server. The EC2 `ubuntu` user has passwordless sudo. Check the prompt: `ubuntu@ip-172-31-42-107` is the server. |
+| `sudo` asks for a password | The command ran on the **Mac**, not the server. The EC2 `ubuntu` user has passwordless sudo. Check the prompt: `ubuntu@ip-<DB_PRIVATE_IP>` is the server. |
 | `sudo -u postgres psql`: *could not change directory to /home/ubuntu* | Harmless. Use `sudo -i -u postgres psql` to avoid it. |
 | `DtypeWarning: Columns (20: order_subtype) have mixed types` | Harmless. Silence with `pd.read_csv(..., low_memory=False)` or an explicit `dtype`. |
 | `uvicorn` fails with `No module named 'nemoguardrails'` even with the venv active | The shell ran the **global** `~/.pyenv/.../uvicorn`. zsh had cached its path before `uvicorn` was installed in `.venv`. Run `rehash`, or always use `uv run uvicorn ...` / `uv run streamlit ...`. |
@@ -295,5 +295,5 @@ When direct DB or SSH connections suddenly time out:
 - [ ] Make `audit_log` append-only at the DB level (a writer role without UPDATE/DELETE).
 - [ ] Rotate the `fde_admin` password (it was exposed in a screenshot).
 - [ ] Fix the AWS CLI credentials (section 4).
-- [ ] Release the unused Elastic IP `3.23.229.148` if not done yet (section 3).
+- [ ] Release the unused Elastic IP `<UNUSED_EIP>` if not done yet (section 3).
 - [ ] `01_ingest_baseline_data.py` uses `if_exists='append'`, so re-running duplicates all 232,158 rows. Truncate first or switch to `'replace'`.
