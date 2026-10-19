@@ -63,6 +63,8 @@ chmod 400 test-FDE-Database.pem
 
 **Action**: release the unassociated one (EC2 → Elastic IPs → Actions → Release). An unattached EIP costs about $3.60/month. Check first that no DNS record or config points at it.
 
+**Status (2026-10-19)**: `fde-elastic-ip` no longer appears in the Elastic IPs list, so it has already been released. Only `fde-ehr-clinical` remains. Don't release that one: the console blocks it while it's associated, and the DB server needs it.
+
 ---
 
 ## 4. AWS CLI `AuthFailure`
@@ -296,5 +298,5 @@ When direct DB or SSH connections suddenly time out:
 - [ ] Make `audit_log` append-only at the DB level (a writer role without UPDATE/DELETE).
 - [x] Rotate the `fde_admin` password (it was exposed in a screenshot). Done 2026-10-17.
 - [ ] Fix the AWS CLI credentials (section 4).
-- [ ] Release the unused Elastic IP `<UNUSED_EIP>` if not done yet (section 3).
+- [x] Release the unused Elastic IP `<UNUSED_EIP>` (section 3). Confirmed gone 2026-10-19.
 - [ ] `01_ingest_baseline_data.py` uses `if_exists='append'`, so re-running duplicates all 232,158 rows. Truncate first or switch to `'replace'`.
