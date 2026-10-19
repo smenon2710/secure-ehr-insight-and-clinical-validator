@@ -104,7 +104,7 @@ Scripts 02, 05 and 06 are optional checks for ingestion, vector search and guard
 docker build -t fde-project-2:latest .
 docker run -d --name fde-project-2 --restart unless-stopped --env-file .env -p 8501:8501 fde-project-2:latest
 ```
-The container runs the API (internal only) and the UI, and exits if `JWT_SECRET` is missing. Create users with `docker exec -it fde-project-2 python scripts/07_manage_users.py ...`.
+The container runs the API (internal only) and the UI, and exits if `JWT_SECRET` is missing. The AWS deployment is kept stopped between demos; see [`docs/DEMO_RUNBOOK.md`](docs/DEMO_RUNBOOK.md). Create users with `docker exec -it fde-project-2 python scripts/07_manage_users.py ...`.
 
 ### Evaluations
 ```
@@ -122,7 +122,7 @@ src/ui/             Streamlit app (clinician and auditor views)
 src/database/       Table schemas
 scripts/            Data loading, embedding and user management (run in order)
 evals/              Redaction, RAG and security evaluations
-docs/               Roadmap, changelog, troubleshooting log
+docs/               Roadmap, changelog, troubleshooting log, demo runbook
 ```
 
 ## Limitations and next steps
@@ -131,7 +131,7 @@ docs/               Roadmap, changelog, troubleshooting log
 - **Evaluation scale**: grow the 14-case set toward ~50 cases across more patients, and run it in CI.
 - **Retrieval**: hybrid full-text + vector search and an HNSW index, with latency and recall benchmarks.
 
-See [`docs/ROADMAP.md`](docs/ROADMAP.md) for the full plan, [`docs/CHANGELOG.md`](docs/CHANGELOG.md) for history, and [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md) for issues hit while deploying on AWS.
+See [`docs/ROADMAP.md`](docs/ROADMAP.md) for the full plan, [`docs/CHANGELOG.md`](docs/CHANGELOG.md) for history, [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md) for issues hit while deploying on AWS, and [`docs/DEMO_RUNBOOK.md`](docs/DEMO_RUNBOOK.md) for starting and stopping the AWS deployment around a demo.
 
 ## Disclaimer
 This is a research and portfolio project. It does not give medical advice and is not intended for clinical use.

@@ -54,6 +54,7 @@ After each answer, check that every cited Record ID was in the retrieved set. Fl
   - *Verify:* `http://` redirects to `https://`, port 8501 is no longer reachable from outside, and sign-in still works.
 - Secrets in AWS Secrets Manager instead of `.env`.
 - Optional: Terraform for the EC2 instances, security groups and networking.
+- Cost: instances stopped between demos (`docs/DEMO_RUNBOOK.md`), budget alert set. Consider merging PostgreSQL onto the app instance to drop one instance, volume and IP.
 - Database hardening: ~~restrict `pg_hba.conf`~~ ✅ and ~~rotate the `fde_admin` password~~ ✅ (2026-10-17); consider migrating to RDS.
 
 ## 7. Presentation

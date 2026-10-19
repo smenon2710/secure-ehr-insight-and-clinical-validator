@@ -297,6 +297,7 @@ When direct DB or SSH connections suddenly time out:
 - [ ] Serve the app over HTTPS. It is plain HTTP on 8501 today, so passwords and tokens cross the network unencrypted. Plan in `docs/ROADMAP.md` item 6.
 - [ ] Make `audit_log` append-only at the DB level (a writer role without UPDATE/DELETE).
 - [x] Rotate the `fde_admin` password (it was exposed in a screenshot). Done 2026-10-17.
-- [ ] Fix the AWS CLI credentials (section 4).
+- [ ] Fix the AWS CLI credentials (section 4). Plan: delete the stale access keys in IAM (and any root keys), confirm MFA on root, and only create a new key if the CLI is actually needed.
+- [x] Monthly AWS cost budget with email alerts. Done 2026-10-19. Instances are stopped between demos (`docs/DEMO_RUNBOOK.md`).
 - [x] Release the unused Elastic IP `<UNUSED_EIP>` (section 3). Confirmed gone 2026-10-19.
 - [ ] `01_ingest_baseline_data.py` uses `if_exists='append'`, so re-running duplicates all 232,158 rows. Truncate first or switch to `'replace'`.

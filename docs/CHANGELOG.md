@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-10-19: Cost controls and demo runbook
+- Both EC2 instances are now stopped between demos. `docs/DEMO_RUNBOOK.md` covers:
+  - start order (database first, then app),
+  - finding the app's new public IP after a start,
+  - health checks and a rehearsal script,
+  - common failures,
+  - shutdown.
+- A monthly AWS cost budget with email alerts is set up.
+- The unused Elastic IP `fde-elastic-ip` is confirmed released. Only `fde-ehr-clinical` (the DB server) remains.
+- Still open: deleting the stale AWS CLI access key (TROUBLESHOOTING section 4).
+
 ## 2026-10-17: Clinician questions redacted before the LLM; Dockerfile in the repo
 
 ### Privacy fix (`src/api/main.py`, `src/pii_redaction/presidio_service.py`)
